@@ -141,10 +141,36 @@ const ROLE_PERMISSIONS = {
   gm:{scan:true,undo:true,revenue:true,manageProducts:true,gmTools:true,vendorCost:false,adminOnly:false},
   admin:{scan:true,undo:true,revenue:true,manageProducts:true,gmTools:true,vendorCost:true,adminOnly:true}
 };
-const params = new URLSearchParams(location.search);
-const HOTEL_ID = params.get("hotel") || "windcrest";
-const ROLE = (params.get("role") || "frontdesk").toLowerCase();
+const params = new URLSearchParams(window.location.search);
+
+const HOTEL_ID = params.get("hotel");
+const ROLE = params.get("role") || "frontdesk";
+
+if (!HOTEL_ID) {
+  document.body.innerHTML = `
+    <div style="font-family:Arial;padding:40px;max-width:700px;margin:auto;">
+      <h1>Invalid Inventory Link</h1>
+      <p>This page cannot be used without a hotel-specific link.</p>
+      <p>Please use the correct QR code or bookmarked hotel link.</p>
+    </div>
+  `;
+  throw new Error("Missing hotel parameter");
+}
+
 const HOTEL = HOTELS[HOTEL_ID];
+
+if (!HOTEL) {
+  document.body.innerHTML = `
+    <div style="font-family:Arial;padding:40px;max-width:700px;margin:auto;">
+      <h1>Hotel Not Configured</h1>
+      <p>This hotel is not set up in the inventory system.</p>
+      <p>Please contact admin.</p>
+    </div>
+  `;
+  throw new Error("Invalid hotel ID");
+}
+
+  
 const PERM = ROLE_PERMISSIONS[ROLE] || ROLE_PERMISSIONS.frontdesk;
 const LOW_STOCK_DEFAULT = 10;
 const LS_INV = `inventory_${HOTEL_ID}_v2`;
