@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Holiday Inn Windcrest Suite Shop Inventory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg:#f6f6f7;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;
+  --green:#16a34a;--yellow:#f59e0b;--red:#dc2626;--orange:#ea580c;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.container{max-width:1200px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:22px;margin:0}
+h2,h3{margin:0}
+.sub{font-size:13px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin-top:16px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.grow{flex:1 1 220px}
+.btn{border:1px solid var(--border);background:#fff;padding:9px 13px;border-radius:14px;cursor:pointer;font-size:14px}
+.btn.primary{background:#111;color:white}
+.btn.danger{background:#dc2626;color:white}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.input{width:100%;border:1px solid var(--border);border-radius:12px;padding:10px;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle}
+th{text-align:left;background:#f3f4f6;position:sticky;top:0}
+.right{text-align:right}
+.small{font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;background:white}
+.status-ok{background:#f0fdf4}
+.status-low{background:#fff7ed}
+.status-out{background:#fef2f2}
+.banner{background:#111;color:white;padding:14px;border-radius:14px;margin-top:12px;text-align:center;font-weight:800}
+.toast{position:fixed;top:12px;right:12px;z-index:9999;color:white;padding:10px 14px;border-radius:12px;display:none;font-weight:700;max-width:330px}
+.toast.ok{background:var(--green)}
+.toast.warn{background:var(--yellow);color:#111}
+.toast.err{background:var(--red)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;place-items:center;padding:16px;z-index:999}
+.modal{background:white;border-radius:18px;border:1px solid var(--border);padding:16px;width:100%;max-width:720px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metric h2{font-size:24px;margin-top:4px}
+.scanbox{font-size:20px;letter-spacing:.5px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}table{font-size:12px}th,td{padding:6px}.container{padding:10px}}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+  <div>
+    <h1>Holiday Inn Windcrest Suite Shop Inventory</h1>
+    <div class="sub">Hotel: <b id="hotelName">Holiday Inn Windcrest</b> | GM: <b id="gmName">Erik Solorio</b></div>
+  </div>
+  <div class="row">
+    <button class="btn primary" onclick="confirmHotelBeforeScan()">Scan</button>
+    <button class="btn" onclick="openAddItem()">Add Item</button>
+    <button class="btn" onclick="manualLowStockAlert()">Send Low Stock Alert</button>
+    <button class="btn" onclick="pullFromSheet(true)">Refresh</button>
+  </div>
+</header>
+
+<div class="banner">You are scanning inventory for: Holiday Inn Windcrest</div>
+
+<section class="card">
+  <div class="row">
+    <div class="grow metric"><div class="small">Units Sold Today</div><h2 id="unitsSold">0</h2></div>
+    <div class="grow metric"><div class="small">Revenue Today</div><h2 id="revenueToday">$0.00</h2></div>
+    <div class="grow metric"><div class="small">Ending Inventory Value</div><h2 id="inventoryValue">$0.00</h2></div>
+    <div class="grow metric"><div class="small">Low / Out Stock Items</div><h2 id="lowStockCount">0</h2></div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="row">
+    <input id="search" class="input grow" placeholder="Search product, barcode, category, or vendor" oninput="render()">
+    <button class="btn" onclick="exportCSV()">Export CSV</button>
+    <button class="btn" onclick="syncCatalog()">Sync Catalog → Sheet</button>
+  </div>
+
+  <div style="overflow:auto;max-height:560px;margin-top:12px">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th><th>Barcode</th><th>Category</th><th>Vendor</th>
+          <th class="right">Price Sold</th><th class="right">Vendor Cost</th>
+          <th class="right">Starting</th><th class="right">Sold</th><th class="right">Ending</th>
+          <th class="right">Revenue</th><th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="inventoryBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Today’s Sales Log</h3>
+  <div style="overflow:auto;max-height:360px;margin-top:10px">
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Product</th><th>Barcode</th><th class="right">Qty</th><th class="right">Revenue</th><th></th></tr>
+      </thead>
+      <tbody id="salesBody"></tbody>
+    </table>
+  </div>
+</section>
+</div>
+
+<div id="addModal" class="modal-bg">
+  <div class="modal">
+    <h3 id="modalTitle">Add Item</h3>
+    <div class="grid" style="margin-top:12px">
+      <div><div class="small">Barcode</div><input id="fBarcode" class="input"></div>
+      <div><div class="small">Product Name</div><input id="fName" class="input"></div>
+      <div><div class="small">Category</div><input id="fCategory" class="input" placeholder="Drink, Chips, Candy, etc."></div>
+      <div><div class="small">Vendor</div><input id="fVendor" class="input" placeholder="Sam's, Costco, PFG, etc."></div>
+      <div><div class="small">Price Sold</div><input id="fPrice" class="input" type="number" step="0.01" min="0"></div>
+      <div><div class="small">Vendor Cost</div><input id="fCost" class="input" type="number" step="0.01" min="0"></div>
+      <div><div class="small">Starting Inventory</div><input id="fStart" class="input" type="number" step="1" min="0"></div>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <button class="btn" onclick="closeAddItem()">Cancel</button>
+      <button id="saveItemBtn" class="btn primary" onclick="saveItem()">Save Item</button>
+    </div>
+  </div>
+</div>
+
+<div id="scanModal" class="modal-bg">
+  <div class="modal">
+    <h3>Scan Session — Holiday Inn Windcrest</h3>
+    <div class="small">Click inside the box, scan item, then press Enter. Scan multiple items, then click Post.</div>
+    <input id="scanBox" class="input scanbox" style="margin-top:10px" placeholder="Scan barcode here">
+    <div style="overflow:auto;max-height:280px;margin-top:12px">
+      <table>
+        <thead><tr><th>Product</th><th>Barcode</th><th class="right">Qty</th><th class="right">Revenue</th></tr></thead>
+        <tbody id="scanBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <button class="btn" onclick="closeScanSession()">Cancel</button>
+      <button id="postScanBtn" class="btn primary" onclick="postScanSession()">Post</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const HOTEL_NAME = "Holiday Inn Windcrest";
+const GM_NAME = "Erik Solorio";
+const GM_EMAIL = "erik.solorio@baywoodhotels.com";
+const LOW_STOCK_THRESHOLD = 10;
+
+// Replace this after Apps Script deployment.
+const GAS_URL = "PASTE_WINDCREST_SCRIPT_URL_HERE";
+
+const LS_INV = "hi_windcrest_inventory_v2";
+const LS_SALES = "hi_windcrest_sales_v2";
+const LS_QUEUE = "hi_windcrest_queue_v2";
+
+let inventory = safeParse(localStorage.getItem(LS_INV), []);
+let sales = safeParse(localStorage.getItem(LS_SALES), []);
+let queue = safeParse(localStorage.getItem(LS_QUEUE), []);
+let editingBarcode = null;
+let scanMap = new Map();
+let isPosting = false;
+
+const money = n => Number(n || 0).toLocaleString(undefined,{style:"currency",currency:"USD"});
+const todayKey = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago"}).format(new Date());
+const timeFmt = ts => {
+  try { return new Date(ts).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); }
+  catch { return "-"; }
+};
+
+function safeParse(v, fallback){ try { return v ? JSON.parse(v) : fallback; } catch { return fallback; } }
+function saveLocal(){
+  localStorage.setItem(LS_INV, JSON.stringify(inventory));
+  localStorage.setItem(LS_SALES, JSON.stringify(sales));
+  localStorage.setItem(LS_QUEUE, JSON.stringify(queue));
+}
+
+function toast(msg,type="ok"){
+  const el=document.getElementById("toast");
+  el.textContent=msg;
+  el.className="toast "+type;
+  el.style.display="block";
+  setTimeout(()=>el.style.display="none",2200);
+}
+
+function hasGasUrl(){
+  return GAS_URL && !GAS_URL.includes("PASTE_WINDCREST");
+}
+
+async function postToSheet(data, queueOnFail=true){
+  if(!hasGasUrl()){
+    if(queueOnFail){ queue.push(data); saveLocal(); }
+    return false;
+  }
+  try{
+    await fetch(GAS_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(data),
+      mode:"no-cors"
+    });
+    return true;
+  }catch(e){
+    if(queueOnFail){ queue.push(data); saveLocal(); }
+    return false;
+  }
+}
+
+async function flushQueue(){
+  if(!queue.length || !hasGasUrl()) return;
+  const pending = [...queue];
+  queue = [];
+  saveLocal();
+  for(const evt of pending){
+    const ok = await postToSheet(evt, false);
+    if(!ok) queue.push(evt);
+  }
+  saveLocal();
+}
+
+async function pullFromSheet(showToast=false){
+  await flushQueue();
+  if(!hasGasUrl()) {
+    render();
+    if(showToast) toast("Paste Apps Script URL first","warn");
+    return;
+  }
+
+  try{
+    const res = await fetch(GAS_URL + "?summary=today", {cache:"no-store"});
+    const data = await res.json();
+
+    if(data.settings){
+      document.getElementById("hotelName").textContent = data.settings.hotelName || HOTEL_NAME;
+      document.getElementById("gmName").textContent = data.settings.gmName || GM_NAME;
+    }
+
+    if(Array.isArray(data.catalog)){
+      inventory = data.catalog.map(p=>({
+        barcode:String(p.barcode||"").trim(),
+        name:String(p.name||"").trim(),
+        category:String(p.category||"").trim(),
+        priceSold:Number(p.priceSold)||0,
+        vendorCost:Number(p.vendorCost)||0,
+        startingInventory:Number(p.startingInventory)||0,
+        vendor:String(p.vendor||"").trim()
+      })).filter(p=>p.barcode && p.name);
+    }
+
+    if(Array.isArray(data.salesTodayRaw)){
+      sales = data.salesTodayRaw.map(s=>({
+        id:s.id || crypto.randomUUID(),
+        ts:s.ts || new Date().toISOString(),
+        date:todayKey(),
+        barcode:String(s.barcode||""),
+        name:String(s.name||""),
+        priceSold:Number(s.priceSold)||0,
+        qty:Number(s.qty)||0,
+        revenue:Number(s.revenue)||0,
+        action:s.action || "SALE"
+      }));
+    }
+
+    saveLocal();
+    render();
+    if(showToast) toast("Synced from Google Sheet");
+  }catch(e){
+    render();
+    if(showToast) toast("Could not sync from sheet","err");
+  }
+}
+
+function soldMap(){
+  const map = new Map();
+  for(const s of sales){
+    if(s.date !== todayKey()) continue;
+    map.set(s.barcode, (map.get(s.barcode)||0) + Number(s.qty||0));
+  }
+  return map;
+}
+
+function itemRows(){
+  const map = soldMap();
+  return inventory.map(p=>{
+    const sold = map.get(p.barcode)||0;
+    const ending = Number(p.startingInventory||0) - sold;
+    const revenue = sold * Number(p.priceSold||0);
+    const invValue = Math.max(0,ending) * Number(p.vendorCost||0);
+    let status = "OK";
+    if(ending <= 0) status = "OUT";
+    else if(ending <= LOW_STOCK_THRESHOLD) status = "LOW";
+    return {...p,sold,ending,revenue,invValue,status};
+  });
+}
+
+function render(){
+  const q=(document.getElementById("search")?.value||"").toLowerCase();
+  const rows = itemRows()
+    .filter(p=>!q || [p.name,p.barcode,p.category,p.vendor].some(x=>String(x).toLowerCase().includes(q)))
+    .sort((a,b)=> (a.status==="OUT"?0:a.status==="LOW"?1:2) - (b.status==="OUT"?0:b.status==="LOW"?1:2) || a.name.localeCompare(b.name));
+
+  const body=document.getElementById("inventoryBody");
+  body.innerHTML="";
+
+  let totalUnits=0,totalRevenue=0,totalValue=0,lowCount=0;
+
+  for(const p of rows){
+    totalUnits += p.sold;
+    totalRevenue += p.revenue;
+    totalValue += p.invValue;
+    if(p.status !== "OK") lowCount++;
+
+    const tr=document.createElement("tr");
+    tr.className = p.status==="OUT" ? "status-out" : p.status==="LOW" ? "status-low" : "status-ok";
+    tr.innerHTML = `
+      <td><b>${escapeHtml(p.name)}</b></td>
+      <td><span class="pill">${escapeHtml(p.barcode)}</span></td>
+      <td>${escapeHtml(p.category)}</td>
+      <td>${escapeHtml(p.vendor)}</td>
+      <td class="right">${money(p.priceSold)}</td>
+      <td class="right">${money(p.vendorCost)}</td>
+      <td class="right">${p.startingInventory}</td>
+      <td class="right">${p.sold}</td>
+      <td class="right"><b>${p.ending}</b></td>
+      <td class="right">${money(p.revenue)}</td>
+      <td>${p.status}</td>
+      <td><button class="btn" onclick="editItem('${escapeJs(p.barcode)}')">Edit</button></td>
+    `;
+    body.appendChild(tr);
+  }
+
+  document.getElementById("unitsSold").textContent = totalUnits;
+  document.getElementById("revenueToday").textContent = money(totalRevenue);
+  document.getElementById("inventoryValue").textContent = money(totalValue);
+  document.getElementById("lowStockCount").textContent = lowCount;
+
+  renderSalesLog();
+}
+
+function renderSalesLog(){
+  const body=document.getElementById("salesBody");
+  body.innerHTML="";
+
+  const rows = [...sales].filter(s=>s.date===todayKey()).reverse();
+  if(!rows.length){
+    body.innerHTML = `<tr><td colspan="6" class="small">No sales posted today.</td></tr>`;
+    return;
+  }
+
+  for(const s of rows){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${timeFmt(s.ts)}</td>
+      <td>${escapeHtml(s.name)}</td>
+      <td><span class="pill">${escapeHtml(s.barcode)}</span></td>
+      <td class="right">${s.qty}</td>
+      <td class="right">${money(s.revenue)}</td>
+      <td><button class="btn danger" onclick="undoSale('${escapeJs(s.id)}')">Undo</button></td>
+    `;
+    body.appendChild(tr);
+  }
+}
+
+function confirmHotelBeforeScan() {
+  const ok = confirm("Confirm you are scanning for Holiday Inn Windcrest.");
+  if (!ok) {
+    toast("Scan cancelled", "warn");
+    return;
+  }
+  openScanSession();
+}
+
+function openAddItem(){
+  editingBarcode = null;
+  document.getElementById("modalTitle").textContent = "Add Item";
+  ["fBarcode","fName","fCategory","fVendor","fPrice","fCost","fStart"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("fBarcode").disabled=false;
+  document.getElementById("addModal").style.display="grid";
+  setTimeout(()=>document.getElementById("fBarcode").focus(),100);
+}
+
+function closeAddItem(){ document.getElementById("addModal").style.display="none"; }
+
+function editItem(barcode){
+  const p = inventory.find(x=>x.barcode===barcode);
+  if(!p) return;
+
+  editingBarcode = barcode;
+  document.getElementById("modalTitle").textContent = "Edit Item";
+  document.getElementById("fBarcode").value = p.barcode;
+  document.getElementById("fBarcode").disabled = true;
+  document.getElementById("fName").value = p.name;
+  document.getElementById("fCategory").value = p.category;
+  document.getElementById("fVendor").value = p.vendor;
+  document.getElementById("fPrice").value = p.priceSold;
+  document.getElementById("fCost").value = p.vendorCost;
+  document.getElementById("fStart").value = p.startingInventory;
+  document.getElementById("addModal").style.display="grid";
+}
+
+async function saveItem(){
+  const btn=document.getElementById("saveItemBtn");
+  btn.disabled=true;
+
+  const item = {
+    barcode: document.getElementById("fBarcode").value.trim(),
+    name: document.getElementById("fName").value.trim(),
+    category: document.getElementById("fCategory").value.trim(),
+    vendor: document.getElementById("fVendor").value.trim(),
+    priceSold: Number(document.getElementById("fPrice").value || 0),
+    vendorCost: Number(document.getElementById("fCost").value || 0),
+    startingInventory: Number(document.getElementById("fStart").value || 0)
+  };
+
+  if(!item.barcode || !item.name){
+    toast("Barcode and product name required","err");
+    btn.disabled=false;
+    return;
+  }
+
+  if(!editingBarcode && inventory.some(p=>p.barcode===item.barcode)){
+    toast("Barcode already exists","err");
+    btn.disabled=false;
+    return;
+  }
+
+  if(editingBarcode){
+    inventory = inventory.map(p=>p.barcode===editingBarcode ? item : p);
+    await postToSheet({type:"updateProduct", payload:item});
+    toast("Item updated");
+  } else {
+    inventory.push(item);
+    await postToSheet({type:"addProduct", payload:item});
+    toast("Item added");
+  }
+
+  saveLocal();
+  closeAddItem();
+  render();
+  btn.disabled=false;
+}
+
+function openScanSession(){
+  scanMap = new Map();
+  document.getElementById("scanBody").innerHTML="";
+  document.getElementById("scanModal").style.display="grid";
+  const box=document.getElementById("scanBox");
+  box.value="";
+  setTimeout(()=>box.focus(),100);
+}
+
+function closeScanSession(){ document.getElementById("scanModal").style.display="none"; }
+
+document.getElementById("scanBox").addEventListener("keydown", e=>{
+  if(e.key==="Enter"){
+    e.preventDefault();
+    const code=e.target.value.trim();
+    e.target.value="";
+    if(code) addScan(code);
+  }
+});
+
+function addScan(code){
+  const p=inventory.find(x=>x.barcode===code);
+  if(!p){
+    toast("Unknown barcode: "+code,"err");
+    return;
+  }
+  scanMap.set(code, (scanMap.get(code)||0)+1);
+  renderScanSession();
+}
+
+function renderScanSession(){
+  const body=document.getElementById("scanBody");
+  body.innerHTML="";
+
+  if(!scanMap.size){
+    body.innerHTML = `<tr><td colspan="4" class="small">No items scanned yet.</td></tr>`;
+    return;
+  }
+
+  for(const [barcode,qty] of scanMap.entries()){
+    const p=inventory.find(x=>x.barcode===barcode);
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td>${escapeHtml(p.name)}</td>
+      <td><span class="pill">${escapeHtml(barcode)}</span></td>
+      <td class="right">${qty}</td>
+      <td class="right">${money(qty * p.priceSold)}</td>
+    `;
+    body.appendChild(tr);
+  }
+}
+
+async function postScanSession(){
+  if(isPosting) return;
+  if(scanMap.size===0){ closeScanSession(); return; }
+
+  isPosting=true;
+  document.getElementById("postScanBtn").disabled=true;
+
+  const entries=[];
+  const now=new Date().toISOString();
+
+  for(const [barcode,qty] of scanMap.entries()){
+    const p=inventory.find(x=>x.barcode===barcode);
+    if(!p) continue;
+
+    const sale = {
+      id:crypto.randomUUID(),
+      ts:now,
+      date:todayKey(),
+      barcode,
+      name:p.name,
+      priceSold:p.priceSold,
+      qty,
+      revenue:qty * p.priceSold,
+      action:"SALE"
+    };
+
+    sales.push(sale);
+
+    entries.push({
+      id:sale.id, ts:sale.ts, hotel:HOTEL_NAME, barcode:sale.barcode,
+      name:sale.name, priceSold:sale.priceSold, qty:sale.qty, revenue:sale.revenue
+    });
+  }
+
+  saveLocal();
+  render();
+  closeScanSession();
+
+  const ok = await postToSheet({type:"batch", payload:entries});
+  toast(ok ? "Sale posted" : "Sale saved locally; sync queued", ok ? "ok" : "warn");
+
+  document.getElementById("postScanBtn").disabled=false;
+  isPosting=false;
+}
+
+async function undoSale(id){
+  const s = sales.find(x=>x.id===id);
+  if(!s) return;
+  if(!confirm(`Undo ${s.qty} x ${s.name}?`)) return;
+
+  sales = sales.filter(x=>x.id!==id);
+  saveLocal();
+  render();
+
+  const ok = await postToSheet({type:"undo", payload:{barcode:s.barcode,name:s.name,qty:s.qty}});
+  toast(ok ? "Sale undone" : "Undo saved locally; sync queued", ok ? "ok" : "warn");
+}
+
+async function syncCatalog(){
+  const ok = await postToSheet({type:"catalog", payload:inventory});
+  toast(ok ? "Catalog synced to sheet" : "Catalog sync queued", ok ? "ok" : "warn");
+}
+
+async function manualLowStockAlert(){
+  const ok = await postToSheet({type:"manualLowStockAlert"});
+  toast(ok ? "Low stock alert sent to GM" : "Alert queued / check GAS URL", ok ? "ok" : "warn");
+}
+
+function exportCSV(){
+  const headers=["Barcode","Product Name","Category","Vendor","Price Sold","Vendor Cost","Starting Inventory"];
+  const rows=inventory.map(p=>[p.barcode,p.name,p.category,p.vendor,p.priceSold,p.vendorCost,p.startingInventory]);
+  const csv=[headers,...rows].map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");
+  const blob=new Blob([csv],{type:"text/csv"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;
+  a.download="holiday_inn_windcrest_inventory.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(s){ return String(s ?? "").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function escapeJs(s){ return String(s ?? "").replace(/\\/g,"\\\\").replace(/'/g,"\\'"); }
+
+window.addEventListener("online", flushQueue);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") pullFromSheet(false); });
+
+pullFromSheet(false);
+</script>
+</body>
+</html>
