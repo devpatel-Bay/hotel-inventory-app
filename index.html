@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Baywood Suite Shop Inventory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+:root{--bg:#f6f6f7;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--ok:#16a34a;--warn:#f59e0b;--err:#dc2626;--dark:#111827;--blue:#2563eb}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:var(--bg);color:var(--text)}
+.container{max-width:1200px;margin:0 auto;padding:16px}.hidden{display:none!important}.row{display:flex;gap:12px;flex-wrap:wrap}.grow{flex:1 1 auto}.right{text-align:right}.center{text-align:center}.small{font-size:12px;color:var(--muted)}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand h1{font-size:22px;margin:0}.brand .sub{font-size:13px;color:var(--muted);margin-top:3px}
+.lock{margin-top:14px;background:#111827;color:#fff;border-radius:16px;padding:14px;text-align:center;font-weight:800;letter-spacing:.02em}.lock .role{font-size:12px;color:#d1d5db;font-weight:600;margin-top:4px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin-top:16px;box-shadow:0 1px 2px rgba(0,0,0,.03)}.card-title{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}.card-title h3{margin:0;font-size:16px}
+.btn{border:1px solid var(--border);background:#fff;padding:9px 13px;border-radius:14px;cursor:pointer;font-size:14px}.btn.primary{background:#111827;color:#fff}.btn.danger{background:#dc2626;color:#fff}.btn:active{transform:scale(.98)}
+.input{width:100%;border:1px solid var(--border);border-radius:12px;padding:10px;font-size:14px;background:#fff}.input:disabled{background:#f9fafb;color:#6b7280}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid var(--border);vertical-align:middle}th{text-align:left;background:#f3f4f6}.pill{display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;background:#fff}
+.sales-log-scroll{overflow:auto;max-height:320px;border:1px solid var(--border);border-radius:14px}.sales-log-scroll table{margin:0}.sales-log-scroll thead th{position:sticky;top:0;z-index:2}.sales-log-scroll tbody tr:last-child td{border-bottom:0}
+.status-ok{background:#f0fdf4}.status-low{background:#fff7ed}.status-out{background:#fef2f2}.metric{min-width:180px}.metric .label{font-size:12px;color:var(--muted)}.metric .value{font-size:24px;font-weight:800;margin-top:4px}
+.toast{position:fixed;top:12px;right:12px;z-index:9999;padding:10px 14px;border-radius:12px;color:#fff;font-weight:800;display:none}.toast.ok{background:var(--ok)}.toast.warn{background:var(--warn);color:#111}.toast.err{background:var(--err)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;place-items:center;padding:16px;z-index:999}.modal{background:#fff;border:1px solid var(--border);border-radius:18px;padding:16px;width:100%;max-width:680px;box-shadow:0 10px 30px rgba(0,0,0,.15)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.invalid{max-width:700px;margin:60px auto;background:#fff;border:1px solid #fecaca;border-radius:18px;padding:22px}.invalid h2{color:#dc2626;margin-top:0}
+@media(max-width:720px){.container{padding:12px}.grid{grid-template-columns:1fr}table{font-size:12px}th,td{padding:6px}.metric{min-width:140px}.brand h1{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+  <header>
+    <div class="brand">
+      <h1>Baywood Suite Shop Inventory</h1>
+      <div class="sub">Hotel: <b id="hotelName">—</b> | Role: <b id="roleLabel">—</b></div>
+    </div>
+    <div class="row">
+      <button class="btn primary" data-perm="scan" onclick="openScanSession()">Scan Items</button>
+      <button class="btn" data-perm="undo" onclick="openUndoModal()">Undo Posted Item</button>
+      <button class="btn" data-perm="manageProducts" onclick="openAddItem()">Add Item</button>
+      <button class="btn" data-perm="gmTools" onclick="manualLowStockAlert()">Send Low Stock Alert</button>
+      <button class="btn" onclick="pullFromSheet(true)">Refresh</button>
+    </div>
+  </header>
+
+  <div class="lock">
+    YOU ARE SCANNING / VIEWING: <span id="lockHotel">—</span>
+    <div class="role" id="lockRole">—</div>
+  </div>
+
+  <section class="card" id="adminDashboard" data-perm="adminOnly">
+    <div class="card-title"><h3>Admin Portfolio Dashboard</h3><span class="small">Phase 1 shows current hotel; Phase 2 can roll all hotels into one command center.</span></div>
+    <div class="row">
+      <div class="metric"><div class="label">Active Hotel</div><div class="value" id="adminActiveHotel">—</div></div>
+      <div class="metric"><div class="label">GM</div><div class="value" id="adminGM">—</div></div>
+      <div class="metric"><div class="label">Backend</div><div class="value" id="adminBackend">OK</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <div class="metric"><div class="label">Units Sold Today</div><div class="value" id="unitsSold">0</div></div>
+      <div class="metric" data-perm="revenue"><div class="label">Today’s Sales Amount</div><div class="value" id="revenueToday">$0.00</div></div>
+      <div class="metric" data-perm="vendorCost"><div class="label">Inventory Value</div><div class="value" id="inventoryValue">$0.00</div></div>
+      <div class="metric"><div class="label">Low / Out of Stock</div><div class="value" id="lowStockCount">0</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-title"><h3>Today’s Sales Log</h3><span class="small">Front desk can see today’s sales amount. Use Undo Posted Item to correct any posted item from today.</span></div>
+    <div class="sales-log-scroll">
+      <table>
+        <thead><tr><th>Time</th><th>Product</th><th>Barcode</th><th class="right">Qty</th><th class="right" data-perm="revenue">Sales Amount</th><th data-perm="undo"></th></tr></thead>
+        <tbody id="salesBody"></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="card">
+    <div class="card-title">
+      <h3>Inventory</h3>
+      <div class="row">
+        <button class="btn" data-perm="manageProducts" onclick="syncCatalog()">Sync Catalog → Sheet</button>
+        <button class="btn" data-perm="adminOnly" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+    <input id="search" class="input" placeholder="Search product, barcode, category, or vendor" oninput="render()" />
+    <div style="overflow:auto;margin-top:12px">
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th><th>Barcode</th><th>Category</th><th data-perm="gmTools">Vendor</th><th class="right">Price Sold</th><th class="right" data-perm="vendorCost">Vendor Cost</th><th class="right">Starting</th><th class="right">Sold</th><th class="right">Ending</th><th class="right" data-perm="revenue">Sales Amount</th><th>Status</th><th data-perm="manageProducts"></th>
+          </tr>
+        </thead>
+        <tbody id="inventoryBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<div id="itemModal" class="modal-bg"><div class="modal">
+  <h3 id="itemModalTitle">Add Item</h3>
+  <div class="grid">
+    <div><div class="small">Barcode</div><input id="fBarcode" class="input" /></div>
+    <div><div class="small">Product Name</div><input id="fName" class="input" /></div>
+    <div><div class="small">Category</div><input id="fCategory" class="input" placeholder="Drink, Chips, Candy" /></div>
+    <div><div class="small">Vendor</div><input id="fVendor" class="input" placeholder="Sam's, Costco, PFG" /></div>
+    <div><div class="small">Price Sold</div><input id="fPrice" class="input" type="number" step="0.01" /></div>
+    <div data-perm="vendorCost"><div class="small">Vendor Cost</div><input id="fCost" class="input" type="number" step="0.01" /></div>
+    <div><div class="small">Starting Inventory</div><input id="fStart" class="input" type="number" /></div>
+  </div>
+  <div class="row" style="justify-content:flex-end;margin-top:14px">
+    <button class="btn" onclick="closeItemModal()">Cancel</button><button class="btn primary" onclick="saveItem()">Save Item</button>
+  </div>
+</div></div>
+
+<div id="scanModal" class="modal-bg"><div class="modal">
+  <h3>Scan Session</h3>
+  <div class="small">Scanner is active. Scan product barcode and press Enter. Post when done.</div>
+  <input id="scanBox" class="input" style="margin-top:10px" placeholder="Scan barcode here" />
+  <div style="overflow:auto;max-height:280px;margin-top:12px"><table><thead><tr><th>Product</th><th>Barcode</th><th class="right">Qty</th><th class="right">Sales Amount</th><th class="right">Action</th></tr></thead><tbody id="scanBody"></tbody></table></div>
+  <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn" onclick="closeScanSession()">Cancel</button><button class="btn primary" onclick="postScanSession()">Post</button></div>
+</div></div>
+
+<div id="undoModal" class="modal-bg"><div class="modal">
+  <h3>Undo Posted Item</h3>
+  <div class="small">Select any product posted today, choose how many units to undo, then confirm. This is not limited to the most recent scan.</div>
+  <div style="overflow:auto;max-height:320px;margin-top:12px;border:1px solid var(--border);border-radius:14px">
+    <table>
+      <thead><tr><th></th><th>Product</th><th>Barcode</th><th class="right">Available to Undo</th></tr></thead>
+      <tbody id="undoBody"></tbody>
+    </table>
+  </div>
+  <div class="row" style="justify-content:flex-end;align-items:center;margin-top:14px">
+    <label class="small">Qty to undo</label>
+    <input id="undoQty" class="input" type="number" min="1" value="1" style="width:100px" />
+    <button class="btn" onclick="closeUndoModal()">Cancel</button>
+    <button class="btn danger" onclick="confirmUndoSelected()">Confirm Undo</button>
+  </div>
+</div></div>
+<div id="toast" class="toast"></div>
+
+<script>
+/**********************************************************************
+ MULTI-HOTEL CONFIG
+ Add future hotels here only. No new repo needed.
+ URL examples:
+ index.html?hotel=windcrest&role=frontdesk
+ index.html?hotel=windcrest&role=gm
+ index.html?hotel=windcrest&role=admin
+**********************************************************************/
+const HOTELS = {
+  windcrest: {
+    hotelId: "windcrest",
+    hotelName: "Holiday Inn Windcrest",
+    gmName: "Erik Solorio",
+    gmEmail: "erik.solorio@baywoodhotels.com",
+    gasUrl: "PASTE_WINDCREST_SCRIPT_URL_HERE"
+  }
+  // Add next hotel like this:
+  // homewood_airport: { hotelId:"homewood_airport", hotelName:"Homewood Suites Airport", gmName:"", gmEmail:"", gasUrl:"PASTE_URL" }
+};
+const ROLE_PERMISSIONS = {
+  frontdesk:{scan:true,undo:true,revenue:true,manageProducts:false,gmTools:false,vendorCost:false,adminOnly:false},
+  gm:{scan:true,undo:true,revenue:true,manageProducts:true,gmTools:true,vendorCost:false,adminOnly:false},
+  admin:{scan:true,undo:true,revenue:true,manageProducts:true,gmTools:true,vendorCost:true,adminOnly:true}
+};
+const params = new URLSearchParams(location.search);
+const HOTEL_ID = params.get("hotel") || "windcrest";
+const ROLE = (params.get("role") || "frontdesk").toLowerCase();
+const HOTEL = HOTELS[HOTEL_ID];
+const PERM = ROLE_PERMISSIONS[ROLE] || ROLE_PERMISSIONS.frontdesk;
+const LOW_STOCK_DEFAULT = 10;
+const LS_INV = `inventory_${HOTEL_ID}_v2`;
+const LS_SALES = `sales_${HOTEL_ID}_v2`;
+let inventory = JSON.parse(localStorage.getItem(LS_INV) || "[]");
+let sales = JSON.parse(localStorage.getItem(LS_SALES) || "[]");
+let settings = { lowStockThreshold: LOW_STOCK_DEFAULT };
+let editingBarcode = null;
+let scanMap = new Map();
+
+const money = n => Number(n || 0).toLocaleString(undefined,{style:"currency",currency:"USD"});
+const todayKey = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago"}).format(new Date());
+const timeFmt = ts => { try { return new Date(ts).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}); } catch { return "-"; } };
+const saveLocal = () => { localStorage.setItem(LS_INV, JSON.stringify(inventory)); localStorage.setItem(LS_SALES, JSON.stringify(sales)); };
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function escJs(s){return String(s??"").replace(/\\/g,"\\\\").replace(/'/g,"\\'");}
+function toast(msg,type="ok"){const el=document.getElementById("toast");el.textContent=msg;el.className=`toast ${type}`;el.style.display="block";setTimeout(()=>el.style.display="none",1800);}
+function fatal(title,msg){document.body.innerHTML=`<div class="invalid"><h2>${esc(title)}</h2><p>${esc(msg)}</p><p>Do not scan. Contact admin for the correct hotel link.</p></div>`;throw new Error(title+": "+msg);}
+function validateHotelConfig(){if(!HOTEL) fatal("Invalid Hotel Link",`Hotel ID '${HOTEL_ID}' is not configured.`); if(!HOTEL.gasUrl || HOTEL.gasUrl.includes("PASTE_")) console.warn("Apps Script URL missing for", HOTEL_ID);}
+function applyRolePermissions(){document.querySelectorAll("[data-perm]").forEach(el=>{const key=el.getAttribute("data-perm");el.classList.toggle("hidden",!PERM[key]);});}
+function initHeader(){document.getElementById("hotelName").textContent=HOTEL.hotelName;document.getElementById("roleLabel").textContent=ROLE.toUpperCase();document.getElementById("lockHotel").textContent=HOTEL.hotelName;document.getElementById("lockRole").textContent=`Mode: ${ROLE.toUpperCase()} | Use this page only for this property`;document.getElementById("adminActiveHotel").textContent=HOTEL.hotelName;document.getElementById("adminGM").textContent=HOTEL.gmName||"—";}
+async function postToSheet(data){if(!HOTEL.gasUrl || HOTEL.gasUrl.includes("PASTE_")){toast("Paste Apps Script URL first","warn");return false;} try{await fetch(HOTEL.gasUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...data,hotelId:HOTEL_ID,hotelName:HOTEL.hotelName}),mode:"no-cors"});return true;}catch(e){toast("Could not send to Google Sheet","err");return false;}}
+async function pullFromSheet(show=false){if(!HOTEL.gasUrl || HOTEL.gasUrl.includes("PASTE_")){render();if(show)toast("Paste Apps Script URL first","warn");return;} try{const res=await fetch(HOTEL.gasUrl+`?summary=today&hotelId=${encodeURIComponent(HOTEL_ID)}`,{cache:"no-store"});const data=await res.json();if(!data.ok) throw new Error(data.error||"Backend error"); if(data.settings && data.settings.hotelId && data.settings.hotelId !== HOTEL_ID){fatal("Hotel Mismatch",`This page is '${HOTEL_ID}', but backend is '${data.settings.hotelId}'.`);} settings = data.settings || settings; if(Array.isArray(data.catalog)){inventory=data.catalog.map(p=>({barcode:String(p.barcode||""),name:p.name||"",category:p.category||"",priceSold:Number(p.priceSold)||0,vendorCost:Number(p.vendorCost)||0,startingInventory:Number(p.startingInventory)||0,vendor:p.vendor||""}));} if(Array.isArray(data.salesTodayRaw)){sales=data.salesTodayRaw.map(s=>({id:s.id||crypto.randomUUID(),ts:s.ts,date:todayKey(),barcode:String(s.barcode||""),name:s.name||"",priceSold:Number(s.priceSold)||0,qty:Number(s.qty)||0,revenue:Number(s.revenue)||0,action:s.action||"SALE"}));} saveLocal();render();if(show)toast("Synced from Google Sheet");}catch(e){render();if(show)toast(e.message||"Could not sync","err");}}
+function soldMap(){const map=new Map();sales.filter(s=>s.date===todayKey()).forEach(s=>map.set(s.barcode,(map.get(s.barcode)||0)+Number(s.qty||0)));return map;}
+function itemRows(){const map=soldMap();const threshold=Number(settings.lowStockThreshold||LOW_STOCK_DEFAULT);return inventory.map(p=>{const sold=map.get(p.barcode)||0;const ending=Number(p.startingInventory||0)-sold;const revenue=sold*Number(p.priceSold||0);const invValue=ending*Number(p.vendorCost||0);let status="OK";if(ending<=0)status="OUT";else if(ending<=threshold)status="LOW";return {...p,sold,ending,revenue,invValue,status};});}
+function render(){const q=(document.getElementById("search")?.value||"").toLowerCase();const rows=itemRows().filter(p=>!q||p.name.toLowerCase().includes(q)||p.barcode.toLowerCase().includes(q)||p.category.toLowerCase().includes(q)||p.vendor.toLowerCase().includes(q));const body=document.getElementById("inventoryBody");body.innerHTML="";let totalUnits=0,totalRevenue=0,totalValue=0,lowCount=0;rows.forEach(p=>{totalUnits+=p.sold;totalRevenue+=p.revenue;totalValue+=p.invValue;if(p.status!=="OK")lowCount++;const tr=document.createElement("tr");tr.className=p.status==="OUT"?"status-out":p.status==="LOW"?"status-low":"status-ok";tr.innerHTML=`<td><b>${esc(p.name)}</b></td><td><span class="pill">${esc(p.barcode)}</span></td><td>${esc(p.category)}</td>${PERM.gmTools?`<td>${esc(p.vendor)}</td>`:""}<td class="right">${money(p.priceSold)}</td>${PERM.vendorCost?`<td class="right">${money(p.vendorCost)}</td>`:""}<td class="right">${p.startingInventory}</td><td class="right">${p.sold}</td><td class="right"><b>${p.ending}</b></td>${PERM.revenue?`<td class="right">${money(p.revenue)}</td>`:""}<td>${p.status}</td>${PERM.manageProducts?`<td><button class="btn" onclick="editItem('${escJs(p.barcode)}')">Edit</button> <button class="btn danger" onclick="deactivateItem('${escJs(p.barcode)}')">Delete</button></td>`:""}`;body.appendChild(tr);});document.getElementById("unitsSold").textContent=totalUnits;document.getElementById("revenueToday").textContent=money(totalRevenue);document.getElementById("inventoryValue").textContent=money(totalValue);document.getElementById("lowStockCount").textContent=lowCount;renderSalesLog();applyRolePermissions();}
+function renderSalesLog(){const body=document.getElementById("salesBody");body.innerHTML="";const rows=[...sales].filter(s=>s.date===todayKey()).reverse();if(!rows.length){body.innerHTML=`<tr><td colspan="6" class="small">No posted sales yet today.</td></tr>`;return;}rows.forEach(s=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${timeFmt(s.ts)}</td><td>${esc(s.name)}</td><td><span class="pill">${esc(s.barcode)}</span></td><td class="right">${s.qty}</td>${PERM.revenue?`<td class="right">${money(s.revenue)}</td>`:""}${PERM.undo&&s.qty>0?`<td><button class="btn danger" onclick="undoSale('${escJs(s.id)}')">Undo Row</button></td>`:""}`;body.appendChild(tr);});}
+function openScanSession(){scanMap=new Map();renderScanSession();document.getElementById("scanModal").style.display="grid";const box=document.getElementById("scanBox");box.value="";setTimeout(()=>box.focus(),100);}function closeScanSession(){document.getElementById("scanModal").style.display="none";}
+document.getElementById("scanBox").addEventListener("keydown",e=>{if(e.key==="Enter"){const code=e.target.value.trim();e.target.value="";if(code)addScan(code);}});
+function addScan(code){const p=inventory.find(x=>x.barcode===code);if(!p){toast("Unknown barcode: "+code,"err");return;}scanMap.set(code,(scanMap.get(code)||0)+1);renderScanSession();}
+function renderScanSession(){const body=document.getElementById("scanBody");body.innerHTML="";if(scanMap.size===0){body.innerHTML=`<tr><td colspan="5" class="small">No items scanned yet.</td></tr>`;return;}for(const [barcode,qty] of scanMap.entries()){const p=inventory.find(x=>x.barcode===barcode);if(!p)continue;const tr=document.createElement("tr");tr.innerHTML=`<td>${esc(p.name)}</td><td><span class="pill">${esc(barcode)}</span></td><td class="right"><button class="btn" onclick="adjustScanQty('${escJs(barcode)}',-1)">−</button> <b style="display:inline-block;min-width:28px;text-align:center">${qty}</b> <button class="btn" onclick="adjustScanQty('${escJs(barcode)}',1)">+</button></td><td class="right">${money(qty*p.priceSold)}</td><td class="right"><button class="btn danger" onclick="removeScanItem('${escJs(barcode)}')">Remove</button></td>`;body.appendChild(tr);}}
+function adjustScanQty(barcode,delta){const current=scanMap.get(barcode)||0;const next=current+delta;if(next<=0){scanMap.delete(barcode);}else{scanMap.set(barcode,next);}renderScanSession();}
+function removeScanItem(barcode){scanMap.delete(barcode);renderScanSession();}
+async function postScanSession(){if(scanMap.size===0){closeScanSession();return;}const entries=[];const now=new Date().toISOString();for(const [barcode,qty] of scanMap.entries()){const p=inventory.find(x=>x.barcode===barcode);if(!p)continue;const sale={id:crypto.randomUUID(),ts:now,date:todayKey(),barcode,name:p.name,priceSold:p.priceSold,qty,revenue:qty*p.priceSold,action:"SALE"};sales.push(sale);entries.push({id:sale.id,ts:sale.ts,hotel:HOTEL.hotelName,hotelId:HOTEL_ID,barcode:sale.barcode,name:sale.name,priceSold:sale.priceSold,qty:sale.qty,revenue:sale.revenue});}saveLocal();render();closeScanSession();await postToSheet({type:"batch",payload:entries});toast("Sale posted");}
+async function undoSale(id){const s=sales.find(x=>x.id===id);if(!s||s.qty<=0)return;const ok=confirm(`Undo this posted row?
+
+${s.name}
+Qty: ${s.qty}`);if(!ok)return;await undoByBarcodeQty(s.barcode,s.qty,s.name);}
+let undoSelection={barcode:null,name:"",max:0};
+function undoAvailableRows(){const group=new Map();sales.filter(s=>s.date===todayKey()).forEach(s=>{const bc=s.barcode;if(!bc)return;const inv=inventory.find(p=>p.barcode===bc);const name=(s.name&&s.name!=="UNDO")?s.name:(inv?.name||"(Unknown)");const rec=group.get(bc)||{barcode:bc,name,total:0};if(name&&name!=="UNDO")rec.name=name;rec.total+=Number(s.qty||0);group.set(bc,rec);});return [...group.values()].filter(r=>r.total>0).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name));}
+function openUndoModal(){if(!PERM.undo)return;buildUndoModal();document.getElementById("undoModal").style.display="grid";}
+function closeUndoModal(){document.getElementById("undoModal").style.display="none";}
+function buildUndoModal(){const body=document.getElementById("undoBody");const rows=undoAvailableRows();body.innerHTML="";undoSelection={barcode:null,name:"",max:0};document.getElementById("undoQty").value=1;if(!rows.length){body.innerHTML=`<tr><td colspan="4" class="small">No posted items available to undo today.</td></tr>`;return;}rows.forEach((r,i)=>{const tr=document.createElement("tr");tr.innerHTML=`<td><input type="radio" name="undoPick" value="${esc(r.barcode)}" ${i===0?"checked":""}></td><td>${esc(r.name)}</td><td><span class="pill">${esc(r.barcode)}</span></td><td class="right">${r.total}</td>`;tr.onclick=()=>selectUndo(r.barcode,r.name,r.total);body.appendChild(tr);if(i===0)selectUndo(r.barcode,r.name,r.total);});}
+function selectUndo(barcode,name,max){undoSelection={barcode,name,max:Math.max(1,Number(max)||1)};document.querySelectorAll('input[name="undoPick"]').forEach(r=>{r.checked=r.value===barcode;});const qty=document.getElementById("undoQty");qty.max=String(undoSelection.max);qty.value=String(Math.min(Math.max(1,Number(qty.value)||1),undoSelection.max));}
+async function confirmUndoSelected(){if(!undoSelection.barcode){toast("Select an item to undo","warn");return;}let qty=Math.floor(Number(document.getElementById("undoQty").value||1));qty=Math.max(1,Math.min(qty,undoSelection.max));const ok=confirm(`Confirm undo?
+
+Product: ${undoSelection.name}
+Qty: ${qty}
+
+This will reduce today’s sales and add inventory back.`);if(!ok)return;await undoByBarcodeQty(undoSelection.barcode,qty,undoSelection.name);buildUndoModal();}
+async function undoByBarcodeQty(barcode,qty,name){let remaining=qty;for(let i=sales.length-1;i>=0&&remaining>0;i--){const s=sales[i];if(s.date!==todayKey()||s.barcode!==barcode||Number(s.qty||0)<=0)continue;const q=Number(s.qty||0);if(q<=remaining){remaining-=q;sales.splice(i,1);}else{s.qty=q-remaining;s.revenue=Number(s.priceSold||0)*s.qty;remaining=0;}}saveLocal();render();await postToSheet({type:"undo",payload:{barcode,name,qty}});toast(`Undid ${qty} item${qty===1?"":"s"}`);}
+function openAddItem(){if(!PERM.manageProducts)return;editingBarcode=null;document.getElementById("itemModalTitle").textContent="Add Item";["fBarcode","fName","fCategory","fVendor","fPrice","fCost","fStart"].forEach(id=>document.getElementById(id).value="");document.getElementById("fBarcode").disabled=false;document.getElementById("itemModal").style.display="grid";setTimeout(()=>document.getElementById("fBarcode").focus(),100);}function closeItemModal(){document.getElementById("itemModal").style.display="none";}
+function editItem(barcode){const p=inventory.find(x=>x.barcode===barcode);if(!p)return;editingBarcode=barcode;document.getElementById("itemModalTitle").textContent="Edit Item";document.getElementById("fBarcode").value=p.barcode;document.getElementById("fBarcode").disabled=true;document.getElementById("fName").value=p.name;document.getElementById("fCategory").value=p.category;document.getElementById("fVendor").value=p.vendor;document.getElementById("fPrice").value=p.priceSold;document.getElementById("fCost").value=p.vendorCost;document.getElementById("fStart").value=p.startingInventory;document.getElementById("itemModal").style.display="grid";applyRolePermissions();}
+async function saveItem(){const item={barcode:document.getElementById("fBarcode").value.trim(),name:document.getElementById("fName").value.trim(),category:document.getElementById("fCategory").value.trim(),vendor:document.getElementById("fVendor").value.trim(),priceSold:Number(document.getElementById("fPrice").value||0),vendorCost:Number(document.getElementById("fCost").value||0),startingInventory:Number(document.getElementById("fStart").value||0)};if(!item.barcode||!item.name){toast("Barcode and product name required","err");return;}if(!editingBarcode&&inventory.some(p=>p.barcode===item.barcode)){toast("Barcode already exists","err");return;}if(editingBarcode){inventory=inventory.map(p=>p.barcode===editingBarcode?item:p);await postToSheet({type:"updateProduct",payload:item});toast("Item updated");}else{inventory.push(item);await postToSheet({type:"addProduct",payload:item});toast("Item added");}saveLocal();closeItemModal();render();}
+async function deactivateItem(barcode){if(!PERM.manageProducts)return;if(!confirm("Delete/deactivate this item?"))return;inventory=inventory.filter(p=>p.barcode!==barcode);saveLocal();render();await postToSheet({type:"deactivateProduct",payload:{barcode}});toast("Item deleted/deactivated");}
+async function syncCatalog(){if(!PERM.manageProducts)return;await postToSheet({type:"catalog",payload:inventory});toast("Catalog synced");}
+async function manualLowStockAlert(){if(!PERM.gmTools)return;await postToSheet({type:"manualLowStockAlert"});toast("Low stock alert sent");}
+function exportCSV(){const headers=["Barcode","Product Name","Category","Vendor","Price Sold","Vendor Cost","Starting Inventory"];const rows=inventory.map(p=>[p.barcode,p.name,p.category,p.vendor,p.priceSold,p.vendorCost,p.startingInventory]);const csv=[headers,...rows].map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\n");const blob=new Blob([csv],{type:"text/csv"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`${HOTEL_ID}_inventory.csv`;a.click();URL.revokeObjectURL(url);}
+validateHotelConfig();initHeader();applyRolePermissions();pullFromSheet(false);
+</script>
+</body>
+</html>
